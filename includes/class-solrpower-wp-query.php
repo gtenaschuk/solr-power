@@ -109,9 +109,7 @@ class SolrPower_WP_Query {
 	 * @return string
 	 */
 	function posts_request( $request, $query ) {
-		if ( ( ! $query->is_search() && ! $query->get( 'solr_integrate' ) )
-		     || false === SolrPower_Api::get_instance()->ping
-		) {
+		if ( $this->is_wp_query( $query ) ) {
 			return $request;
 		}
 		add_filter( 'solr_query', array( SolrPower_Api::get_instance(), 'dismax_query' ), 10, 2 );
@@ -329,7 +327,7 @@ class SolrPower_WP_Query {
 	 * @return string
 	 */
 	function found_posts_query( $sql, $query ) {
-		if ( ! $query->is_search() || false === SolrPower_Api::get_instance()->ping ) {
+		if ( $this->is_wp_query( $query ) ) {
 			return $sql;
 		}
 
@@ -417,8 +415,8 @@ class SolrPower_WP_Query {
 			'page_id' => 'ID',
 			'name'    => 'post_name'
 		);
-		if ( ! $query->get( 's' ) && ! $query->get( 'solr_integrate' ) ) {
-			return '';
+		if ( ( $this->is_wp_query( $query ) ) ) {
+			return $query->get( 's' );
 		}
 
 		$solr_query = array();
@@ -1069,6 +1067,30 @@ class SolrPower_WP_Query {
 		}
 	}
 
+	/**
+	 * Determine if it is a wordpress query
+	 * @param  Wp_Query  $query Current wordpress query
+	 * @return boolean        true if it is a wordpress query or false if it is solr query
+	 */
+	public function is_wp_query( $query ) {
+		// Solr query should not be used when:
+		// * is not search and solr_integrate attribute is false or was not set
+		// * ping to solr server is not working
+		// * is admin search and post type is not indexed
+		return ( ( ! $query->is_search() && ! $query->get( 'solr_integrate' ) ) || false === SolrPower_Api::get_instance()->ping || $this->is_wp_admin_search_query( $query ) );
+	}
+
+	/**
+	 * Determine if it is a admin search query
+	 * @param  Wp_Query  $query Current wordpress query
+	 * @return boolean        true if it is a wordpress admin search query or false if it is solr query
+	 */
+	public function is_wp_admin_search_query( $query ) {
+		global $pagenow;
+		$post_types = apply_filters('solr_post_types', get_post_types( array( 'exclude_from_search' => false ) ) );
+		// Solr query should not be used when:
+		// * is admin, is search, post_type attribute is set but post_type should not be indexed
+		return ( is_admin() && 'edit.php' === $pagenow && $query->is_search() && $query->get( 'post_type' ) && ! in_array( $query->get( 'post_type' ), $post_types ) );
+	}
+
 }
-
-
